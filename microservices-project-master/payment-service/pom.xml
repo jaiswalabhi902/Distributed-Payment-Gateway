@@ -34,6 +34,13 @@
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
+        <!-- Prometheus metrics endpoint -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
         <!-- Spring Data R2DBC (Reactive DB) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -45,6 +52,12 @@
             <groupId>io.asyncer</groupId>
             <artifactId>r2dbc-mysql</artifactId>
             <version>0.9.1</version>
+        </dependency>
+
+        <!-- JDBC pool (HikariCP) used only by Flyway; runtime access is via R2DBC. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-jdbc</artifactId>
         </dependency>
 
         <!-- MySQL JDBC Driver (for Flyway) -->
@@ -60,16 +73,10 @@
             <artifactId>spring-kafka</artifactId>
         </dependency>
 
-        <!-- Spring Data Redis -->
+        <!-- Spring Data Redis (reactive, backed by Lettuce) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-data-redis</artifactId>
-        </dependency>
-
-        <!-- Jedis (Redis client) -->
-        <dependency>
-            <groupId>redis.clients</groupId>
-            <artifactId>jedis</artifactId>
+            <artifactId>spring-boot-starter-data-redis-reactive</artifactId>
         </dependency>
 
         <!-- Validation -->

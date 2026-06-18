@@ -1,64 +1,86 @@
 spring:
   application:
     name: payment-service
-  
+
   r2dbc:
-    url: r2dbc:mysql://localhost:3306/microservices_db
-    username: root
-    password: root
+    url: r2dbc:mysql://localhost:3307/microservices_db
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:root}
     pool:
-      max-acquire-time: 2000
-      initial-size: 10
+      initial-size: 5
       max-size: 20
       max-idle-time: 30m
+      max-acquire-time: 2s
       validation-query: SELECT 1
-  
-  datasource:
-    url: jdbc:mysql://localhost:3306/microservices_db
-    username: root
-    password: root
-    driver-class-name: com.mysql.cj.jdbc.Driver
-  
+
+  # Flyway needs a JDBC connection. Because an R2DBC ConnectionFactory is present,
+  # Spring Boot disables JDBC DataSource auto-config, so Flyway is given its own URL.
   flyway:
     enabled: true
+    url: jdbc:mysql://localhost:3307/microservices_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    user: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:root}
     locations: classpath:db/migration
     baseline-on-migrate: true
-  
+    # Shared DB already holds auth tables, so the schema is "non-empty"; baseline at 0
+    # ensures the V1 payment migration still runs instead of being skipped.
+    baseline-version: 0
+    # Distinct history table: auth-service and payment-service share microservices_db.
+    table: flyway_payment_history
+
   kafka:
-    bootstrap-servers: localhost:9092
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
       acks: all
       retries: 3
+      properties:
+        # Fail fast instead of the 60s default when the broker is unreachable.
+        max.block.ms: 5000
     consumer:
-      bootstrap-servers: localhost:9092
       group-id: payment-service-group
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       auto-offset-reset: earliest
-  
-  redis:
-    host: localhost
-    port: 6379
-    timeout: 2000
-    jedis:
-      pool:
-        max-active: 8
-        max-idle: 8
-        min-idle: 0
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.microservices.*"
+        spring.json.value.default.type: com.microservices.payment.event.PaymentEvent
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 2s
 
 server:
   port: 8081
   netty:
-    connection-timeout: 5000
+    connection-timeout: 5s
+
+app:
+  rate-limit:
+    enabled: true
+    limit: 100
+    window: 1m
 
 management:
   endpoints:
     web:
       exposure:
-        include: health,metrics,info
+        include: health,metrics,info,prometheus
   endpoint:
     health:
       show-details: always
+      probes:
+        enabled: true
+      # Liveness/readiness ignore optional infra (Redis/Kafka). Readiness gates only
+      # on the database, since the rate limiter and event publisher fail gracefully.
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,r2dbc
 
 logging:
   level:

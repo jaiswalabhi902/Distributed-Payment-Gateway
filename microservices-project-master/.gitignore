@@ -11,8 +11,16 @@ target/
 node_modules/
 dist/
 src/main/resources/keys/private_key.pem
+# Generated RSA keys (never commit private keys)
+keys/
+**/keys/
 .env
 .env.local
+# Local debug capture files
+paylog*.txt
+payrun*.txt
+payfinal*.txt
+state.txt
 *.swp
 *.swo
 ~*

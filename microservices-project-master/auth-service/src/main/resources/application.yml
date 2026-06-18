@@ -1,22 +1,23 @@
 spring:
   application:
     name: auth-service
-  
+
   datasource:
-    url: jdbc:mysql://localhost:3307/microservices_db
-    username: root
-    password: root
+    url: jdbc:mysql://localhost:3307/microservices_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:root}
     driver-class-name: com.mysql.cj.jdbc.Driver
-  
+
   jpa:
+    # Flyway is the single source of truth for the schema; Hibernate must not alter it.
     hibernate:
-      ddl-auto: validate
+      ddl-auto: none
+    open-in-view: false
     show-sql: false
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.MySQL8Dialect
         format_sql: true
-  
+
   flyway:
     enabled: true
     locations: classpath:db/migration
@@ -27,14 +28,34 @@ server:
   servlet:
     context-path: /
 
+# JWT / RSA key configuration (see RsaKeyProvider & JwtProperties)
+app:
+  security:
+    jwt:
+      issuer: auth-service
+      access-token-expiration: 15m
+      refresh-token-expiration: 7d
+      key-directory: ${JWT_KEY_DIR:./keys}
+  bootstrap:
+    admin-username: ${ADMIN_USERNAME:admin}
+    admin-email: ${ADMIN_EMAIL:admin@microservices.local}
+    admin-password: ${ADMIN_PASSWORD:admin123}
+
 management:
   endpoints:
     web:
       exposure:
-        include: health,metrics,info
+        include: health,metrics,info,prometheus
   endpoint:
     health:
       show-details: always
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,db
 
 logging:
   level:

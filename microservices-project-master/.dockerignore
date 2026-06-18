@@ -1,0 +1,12 @@
+# Build output
+**/target/
+# Generated JWT keys (must never be baked into images)
+**/keys/
+# VCS / IDE
+.git/
+.github/
+.idea/
+*.iml
+# Docs and local notes
+docs/
+*.md
