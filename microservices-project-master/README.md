@@ -35,6 +35,10 @@ metrics stack.
 
 `common` is a shared library (DTOs, exceptions, constants, logging config).
 
+> 📐 **See [ARCHITECTURE.md](ARCHITECTURE.md)** for the full design: component breakdown,
+> request/event flow sequence diagrams, the data model, and the deployment topology
+> (all diagrams render on GitHub).
+
 ## Run the full stack (Docker)
 
 Requires Docker Desktop running.
