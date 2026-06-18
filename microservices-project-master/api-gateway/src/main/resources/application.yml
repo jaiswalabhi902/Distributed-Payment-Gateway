@@ -1,0 +1,59 @@
+spring:
+  application:
+    name: api-gateway
+
+  cloud:
+    gateway:
+      routes:
+        - id: auth-service
+          uri: ${AUTH_SERVICE_URI:http://localhost:8080}
+          predicates:
+            - Path=/api/auth/**
+        - id: payment-service
+          uri: ${PAYMENT_SERVICE_URI:http://localhost:8081}
+          predicates:
+            - Path=/api/payments/**
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowed-origin-patterns: "*"
+            allowed-methods: "*"
+            allowed-headers: "*"
+            allow-credentials: true
+      httpclient:
+        connect-timeout: 2000
+        response-timeout: 10s
+
+server:
+  port: 8090
+
+app:
+  security:
+    jwt:
+      issuer: auth-service
+      # Shared with auth-service. Locally this points at the key auth-service generates;
+      # in deployment both services mount the same key volume.
+      public-key-location: ${JWT_PUBLIC_KEY:../auth-service/keys/public_key.pem}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,info,prometheus,gateway
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState
+
+logging:
+  level:
+    root: INFO
+    com.microservices: DEBUG
+  pattern:
+    console: "[%d{yyyy-MM-dd HH:mm:ss}] %-5p %logger{36} - %msg%n"
