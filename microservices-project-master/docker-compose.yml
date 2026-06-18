@@ -1,55 +1,41 @@
-version: '3.8'
-
 services:
-  # MySQL Database (Aurora Compatible)
+  # ---------------- Infrastructure ----------------
   mysql:
     image: mysql:8.0
     container_name: mysql-container
     environment:
-      MYSQL_ROOT_PASSWORD: root
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
       MYSQL_DATABASE: microservices_db
-      MYSQL_USER: devuser
-      MYSQL_PASSWORD: devpass
       MYSQL_ROOT_HOST: '%'
-    ports:
-      - "3306:3306"
+    expose:
+      - "3306"
     volumes:
       - mysql-data:/var/lib/mysql
       - ./docker/mysql-init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - microservices-net
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
     command: --default-authentication-plugin=mysql_native_password
 
-  # Zookeeper (required by Kafka)
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
     container_name: zookeeper-container
-
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
-      ZOOKEEPER_SYNC_LIMIT: 5
-      ZOOKEEPER_INIT_LIMIT: 10
       KAFKA_OPTS: "-Dzookeeper.4lw.commands.whitelist=ruok"
-
-    ports:
-      - "2181:2181"
-
     networks:
       - microservices-net
-
     healthcheck:
-      test: ["CMD-SHELL", "echo ruok | nc localhost 2181"]
+      test: ["CMD-SHELL", "echo ruok | nc localhost 2181 | grep imok"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # Kafka Message Broker
   kafka:
     image: confluentinc/cp-kafka:7.5.0
     container_name: kafka-container
@@ -64,22 +50,22 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
-    ports:
-      - "9092:9092"
+    expose:
+      - "9092"
+      - "29092"
     networks:
       - microservices-net
     healthcheck:
       test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server=localhost:9092"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
 
-  # Redis Cache
   redis:
     image: redis:7-alpine
     container_name: redis-container
-    ports:
-      - "6379:6379"
+    expose:
+      - "6379"
     networks:
       - microservices-net
     healthcheck:
@@ -88,8 +74,132 @@ services:
       timeout: 5s
       retries: 5
 
+  # ---------------- Application services ----------------
+  auth-service:
+    build:
+      context: .
+      dockerfile: docker/auth.Dockerfile
+    container_name: auth-service
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/microservices_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      DB_USERNAME: ${DB_USERNAME:-root}
+      DB_PASSWORD: ${DB_PASSWORD:-root}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
+      JWT_KEY_DIR: /app/keys
+    volumes:
+      - jwt-keys:/app/keys
+    # Not published to the host: only the gateway should reach this service.
+    expose:
+      - "8080"
+    networks:
+      - microservices-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health/readiness"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  payment-service:
+    build:
+      context: .
+      dockerfile: docker/payment.Dockerfile
+    container_name: payment-service
+    depends_on:
+      mysql:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_R2DBC_URL: r2dbc:mysql://mysql:3306/microservices_db
+      SPRING_FLYWAY_URL: jdbc:mysql://mysql:3306/microservices_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      DB_USERNAME: ${DB_USERNAME:-root}
+      DB_PASSWORD: ${DB_PASSWORD:-root}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JAVA_OPTS: ${PAYMENT_JAVA_OPTS:-}
+    # Not published to the host: only the gateway should reach this service.
+    expose:
+      - "8081"
+    networks:
+      - microservices-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health/readiness"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: docker/gateway.Dockerfile
+    container_name: api-gateway
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      payment-service:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      AUTH_SERVICE_URI: http://auth-service:8080
+      PAYMENT_SERVICE_URI: http://payment-service:8081
+      JWT_PUBLIC_KEY: /app/keys/public_key.pem
+    volumes:
+      - jwt-keys:/app/keys:ro
+    ports:
+      - "${GATEWAY_PORT:-8090}:8090"
+    networks:
+      - microservices-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/actuator/health/readiness"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+
+  # ---------------- Monitoring ----------------
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    networks:
+      - microservices-net
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    depends_on:
+      - prometheus
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    networks:
+      - microservices-net
+
 volumes:
   mysql-data:
+    driver: local
+  grafana-data:
+    driver: local
+  jwt-keys:
     driver: local
 
 networks:
