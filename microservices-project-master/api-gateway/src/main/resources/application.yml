@@ -12,7 +12,12 @@ spring:
         - id: payment-service
           uri: ${PAYMENT_SERVICE_URI:http://localhost:8081}
           predicates:
-            - Path=/api/payments/**
+            - Path=/api/payments/**,/api/merchants/**
+        # Public merchant API — authenticated by API key at the payment service, not JWT.
+        - id: merchant-api
+          uri: ${PAYMENT_SERVICE_URI:http://localhost:8081}
+          predicates:
+            - Path=/v1/**
       globalcors:
         cors-configurations:
           '[/**]':

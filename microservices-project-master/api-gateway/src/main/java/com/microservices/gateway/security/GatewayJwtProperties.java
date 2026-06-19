@@ -18,12 +18,13 @@ public class GatewayJwtProperties {
     /** Filesystem path to the RS256 public key (PEM) used to verify tokens. */
     private String publicKeyLocation = "./keys/public_key.pem";
 
-    /** Ant-style path patterns that bypass authentication. */
+    /** Ant-style path patterns that bypass JWT auth (the merchant API uses API-key auth). */
     private List<String> publicPaths = List.of(
             "/api/auth/login",
             "/api/auth/register",
             "/api/auth/refresh",
             "/api/auth/health",
+            "/v1/**",
             "/actuator/**"
     );
 }

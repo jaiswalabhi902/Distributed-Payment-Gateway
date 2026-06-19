@@ -2,6 +2,7 @@ package com.microservices.payment.config;
 
 import com.microservices.payment.domain.PaymentMethod;
 import com.microservices.payment.domain.PaymentStatus;
+import com.microservices.payment.merchant.domain.OrderStatus;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.convert.converter.Converter;
@@ -25,7 +26,9 @@ public class R2dbcConfig {
                 new PaymentStatusWriter(),
                 new PaymentStatusReader(),
                 new PaymentMethodWriter(),
-                new PaymentMethodReader()));
+                new PaymentMethodReader(),
+                new OrderStatusWriter(),
+                new OrderStatusReader()));
     }
 
     @WritingConverter
@@ -57,6 +60,22 @@ public class R2dbcConfig {
         @Override
         public PaymentMethod convert(String source) {
             return PaymentMethod.valueOf(source);
+        }
+    }
+
+    @WritingConverter
+    static class OrderStatusWriter implements Converter<OrderStatus, String> {
+        @Override
+        public String convert(OrderStatus source) {
+            return source.name();
+        }
+    }
+
+    @ReadingConverter
+    static class OrderStatusReader implements Converter<String, OrderStatus> {
+        @Override
+        public OrderStatus convert(String source) {
+            return OrderStatus.valueOf(source);
         }
     }
 }
