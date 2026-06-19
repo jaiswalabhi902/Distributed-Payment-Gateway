@@ -63,6 +63,14 @@ app:
     enabled: true
     limit: 100
     window: 1m
+  merchant:
+    # Base64-encoded 32-byte AES-256 key used to encrypt merchant key secrets at rest.
+    # Override in production via MERCHANT_ENCRYPTION_KEY.
+    encryption-key: ${MERCHANT_ENCRYPTION_KEY:MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=}
+    # A deterministic sandbox merchant seeded on first start (for local testing/docs).
+    seed-test-merchant: ${SEED_TEST_MERCHANT:true}
+    test-key-id: ${TEST_KEY_ID:mk_test_seedmerchant01}
+    test-key-secret: ${TEST_KEY_SECRET:testsecret_do_not_use_in_prod00}
 
 management:
   endpoints:
